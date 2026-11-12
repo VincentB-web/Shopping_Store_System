@@ -8,7 +8,7 @@ submit.addEventListener('click', ()=>{
   const password = pw.value;
   if (password === "Akivuv" && username === "admin") {
     stats.textContent = "logged in!";
-    window.location.href = "./main/dashboard.html";
+    window.location.href = "dashboard.html";
   } else {
     stats.textContent = "Invalid/empty input.";
   }
