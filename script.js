@@ -13,3 +13,4 @@ submit.addEventListener('click', ()=>{
     stats.textContent = "Invalid/empty input.";
   }
 });
+
