@@ -1,0 +1,43 @@
+* {
+  padding: 10px;
+  margin: 5px;
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+}
+
+body {
+  padding: 0px;
+  display: flex;
+  flex-direction: row;
+}
+
+div {
+  display: flex;
+  flex-direction: column;
+}
+
+div,input,button,section{
+  align-self: center;
+  align-items: center;
+  border-radius: 10px;
+  border: #61626F solid 1px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.parent,header {
+  display: flex;
+  flex-direction: column;
+  header{
+    flex-direction: row;
+  }
+}
+
+@media screen and(min-width: 768px) {
+  body{
+    display: flex;
+    flex-direction: column;
+  }
+}
