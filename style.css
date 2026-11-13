@@ -22,6 +22,14 @@ div,input,button,section{
   border: #61626F solid 1px;
 }
 
+button:hover {
+  transition: .2s ease-in-out;
+  background-color: #CDCDCD;
+  color: #000;
+}
+
+/* dashboard */
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -33,6 +41,10 @@ div,input,button,section{
   header{
     flex-direction: row;
   }
+}
+
+.dashboard, .pos {
+  display: none;
 }
 
 @media screen and(min-width: 768px) {
