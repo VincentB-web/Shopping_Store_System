@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 $db = new PDO('sqlite:' . __DIR__ . '/stall-pos.sqlite');
@@ -8,10 +9,17 @@ $db->exec('CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCRE
 $db->exec('CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
 $db->exec('CREATE TABLE IF NOT EXISTS sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL REFERENCES sales(id), product_id INTEGER NOT NULL, name TEXT NOT NULL, quantity INTEGER NOT NULL, price REAL NOT NULL)');
 if ((int)$db->query('SELECT COUNT(*) FROM products')->fetchColumn() === 0) {
-  $seed = [['Classic Burger','Burgers',89,24,'🍔'],['Cheese Burger','Burgers',109,18,'🍔'],['Bacon Burger','Burgers',139,12,'🍔'],['Fries','Street food',49,30,'🍟'],['Chicken Popcorn','Street food',79,20,'🍗'],['Fishball (10 pcs)','Street food',35,40,'🍢'],['Wintermelon Milk Tea','Milk tea',79,22,'🧋'],['Taro Milk Tea','Milk tea',89,16,'🧋'],['Okinawa Milk Tea','Milk tea',89,14,'🧋'],['Iced Coffee','Drinks',59,25,'🥤'],['Cheese Sticks','Street food',55,15,'🧀'],['Hotdog Sandwich','Street food',65,17,'🌭']];
-  $insert = $db->prepare('INSERT INTO products (name,category,price,stock,emoji) VALUES (?,?,?,?,?)'); foreach ($seed as $item) $insert->execute($item);
+  $seed = [['Classic Burger', 'Burgers', 89, 24, '🍔'], ['Cheese Burger', 'Burgers', 109, 18, '🍔'], ['Bacon Burger', 'Burgers', 139, 12, '🍔'], ['Fries', 'Street food', 49, 30, '🍟'], ['Chicken Popcorn', 'Street food', 79, 20, '🍗'], ['Fishball (10 pcs)', 'Street food', 35, 40, '🍢'], ['Wintermelon Milk Tea', 'Milk tea', 79, 22, '🧋'], ['Taro Milk Tea', 'Milk tea', 89, 16, '🧋'], ['Okinawa Milk Tea', 'Milk tea', 89, 14, '🧋'], ['Iced Coffee', 'Drinks', 59, 25, '🥤'], ['Cheese Sticks', 'Street food', 55, 15, '🧀'], ['Hotdog Sandwich', 'Street food', 65, 17, '🌭']];
+  $insert = $db->prepare('INSERT INTO products (name,category,price,stock,emoji) VALUES (?,?,?,?,?)');
+  foreach ($seed as $item) $insert->execute($item);
 }
-function jsonOut(mixed $data, int $status=200): never { http_response_code($status); header('Content-Type: application/json; charset=utf-8'); echo json_encode($data, JSON_UNESCAPED_UNICODE); exit; }
+function jsonOut(mixed $data, int $status = 200): never
+{
+  http_response_code($status);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode($data, JSON_UNESCAPED_UNICODE);
+  exit;
+}
 if (isset($_GET['api'])) {
   try {
     $action = $_GET['api'];
@@ -19,37 +27,237 @@ if (isset($_GET['api'])) {
     if ($action === 'sales' && $_SERVER['REQUEST_METHOD'] === 'GET') {
       $sales = $db->query('SELECT s.*, (SELECT COUNT(*) FROM sale_items i WHERE i.sale_id=s.id) AS lines FROM sales s ORDER BY s.id DESC LIMIT 30')->fetchAll(PDO::FETCH_ASSOC);
       $today = $db->query("SELECT COALESCE(SUM(total),0) total, COUNT(*) orders FROM sales WHERE date(created_at)=date('now','localtime')")->fetch(PDO::FETCH_ASSOC);
-      $low = (int)$db->query('SELECT COUNT(*) FROM products WHERE active=1 AND stock<=5')->fetchColumn(); jsonOut(['sales'=>$sales,'today'=>$today,'low'=>$low]);
+      $low = (int)$db->query('SELECT COUNT(*) FROM products WHERE active=1 AND stock<=5')->fetchColumn();
+      jsonOut(['sales' => $sales, 'today' => $today, 'low' => $low]);
     }
     if ($action === 'checkout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-      $body = json_decode(file_get_contents('php://input'), true) ?? []; $items = $body['items'] ?? []; $payment = in_array($body['payment'] ?? '', ['Cash','GCash'], true) ? $body['payment'] : 'Cash';
-      if (!$items) jsonOut(['error'=>'Your cart is empty.'], 422);
-      $db->beginTransaction(); $total=0; $lines=[];
-      foreach ($items as $line) { $id=(int)($line['id']??0); $qty=(int)($line['quantity']??0); $q=$db->prepare('SELECT * FROM products WHERE id=? AND active=1'); $q->execute([$id]); $p=$q->fetch(PDO::FETCH_ASSOC); if (!$p || $qty<1 || $p['stock']<$qty) { $db->rollBack(); jsonOut(['error'=>($p ? $p['name'].' has only '.$p['stock'].' left in stock.' : 'A product is no longer available.')],422); } $total+=(float)$p['price']*$qty; $lines[]=[$p,$qty]; }
-      $q=$db->prepare('INSERT INTO sales(total,payment) VALUES(?,?)'); $q->execute([$total,$payment]); $saleId=(int)$db->lastInsertId();
-      foreach($lines as [$p,$qty]) { $q=$db->prepare('INSERT INTO sale_items(sale_id,product_id,name,quantity,price) VALUES(?,?,?,?,?)'); $q->execute([$saleId,$p['id'],$p['name'],$qty,$p['price']]); $q=$db->prepare('UPDATE products SET stock=stock-? WHERE id=?'); $q->execute([$qty,$p['id']]); }
-      $db->commit(); jsonOut(['ok'=>true,'id'=>$saleId,'total'=>$total]);
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      $items = $body['items'] ?? [];
+      $payment = in_array($body['payment'] ?? '', ['Cash', 'GCash'], true) ? $body['payment'] : 'Cash';
+      if (!$items) jsonOut(['error' => 'Your cart is empty.'], 422);
+      $db->beginTransaction();
+      $total = 0;
+      $lines = [];
+      foreach ($items as $line) {
+        $id = (int)($line['id'] ?? 0);
+        $qty = (int)($line['quantity'] ?? 0);
+        $q = $db->prepare('SELECT * FROM products WHERE id=? AND active=1');
+        $q->execute([$id]);
+        $p = $q->fetch(PDO::FETCH_ASSOC);
+        if (!$p || $qty < 1 || $p['stock'] < $qty) {
+          $db->rollBack();
+          jsonOut(['error' => ($p ? $p['name'] . ' has only ' . $p['stock'] . ' left in stock.' : 'A product is no longer available.')], 422);
+        }
+        $total += (float)$p['price'] * $qty;
+        $lines[] = [$p, $qty];
+      }
+      $q = $db->prepare('INSERT INTO sales(total,payment) VALUES(?,?)');
+      $q->execute([$total, $payment]);
+      $saleId = (int)$db->lastInsertId();
+      foreach ($lines as [$p, $qty]) {
+        $q = $db->prepare('INSERT INTO sale_items(sale_id,product_id,name,quantity,price) VALUES(?,?,?,?,?)');
+        $q->execute([$saleId, $p['id'], $p['name'], $qty, $p['price']]);
+        $q = $db->prepare('UPDATE products SET stock=stock-? WHERE id=?');
+        $q->execute([$qty, $p['id']]);
+      }
+      $db->commit();
+      jsonOut(['ok' => true, 'id' => $saleId, 'total' => $total]);
     }
     if ($action === 'product' && $_SERVER['REQUEST_METHOD'] === 'DELETE') {
-      $id=(int)($_GET['id']??0); $q=$db->prepare('UPDATE products SET active=0 WHERE id=?'); $q->execute([$id]); jsonOut(['ok'=>true]);
+      $id = (int)($_GET['id'] ?? 0);
+      $q = $db->prepare('UPDATE products SET active=0 WHERE id=?');
+      $q->execute([$id]);
+      jsonOut(['ok' => true]);
     }
-    if ($action === 'product' && in_array($_SERVER['REQUEST_METHOD'], ['POST','PUT'], true)) {
-      $b=json_decode(file_get_contents('php://input'),true)??[]; $name=trim($b['name']??''); $cat=trim($b['category']??''); $price=(float)($b['price']??0); $stock=(int)($b['stock']??0); $emoji=trim($b['emoji']??'🍔');
-      if (!$name || !$cat || $price<=0 || $stock<0) jsonOut(['error'=>'Enter a name, category, valid price and stock.'],422);
-      if ($_SERVER['REQUEST_METHOD'] === 'PUT') { $id=(int)($_GET['id']??0); $q=$db->prepare('UPDATE products SET name=?,category=?,price=?,stock=?,emoji=? WHERE id=? AND active=1'); $q->execute([$name,$cat,$price,$stock,$emoji,$id]); if(!$q->rowCount()) jsonOut(['error'=>'Product not found.'],404); jsonOut(['ok'=>true]); }
-      $q=$db->prepare('INSERT INTO products(name,category,price,stock,emoji) VALUES(?,?,?,?,?)'); $q->execute([$name,$cat,$price,$stock,$emoji]); jsonOut(['ok'=>true]);
+    if ($action === 'product' && in_array($_SERVER['REQUEST_METHOD'], ['POST', 'PUT'], true)) {
+      $b = json_decode(file_get_contents('php://input'), true) ?? [];
+      $name = trim($b['name'] ?? '');
+      $cat = trim($b['category'] ?? '');
+      $price = (float)($b['price'] ?? 0);
+      $stock = (int)($b['stock'] ?? 0);
+      $emoji = trim($b['emoji'] ?? '🍔');
+      if (!$name || !$cat || $price <= 0 || $stock < 0) jsonOut(['error' => 'Enter a name, category, valid price and stock.'], 422);
+      if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+        $id = (int)($_GET['id'] ?? 0);
+        $q = $db->prepare('UPDATE products SET name=?,category=?,price=?,stock=?,emoji=? WHERE id=? AND active=1');
+        $q->execute([$name, $cat, $price, $stock, $emoji, $id]);
+        if (!$q->rowCount()) jsonOut(['error' => 'Product not found.'], 404);
+        jsonOut(['ok' => true]);
+      }
+      $q = $db->prepare('INSERT INTO products(name,category,price,stock,emoji) VALUES(?,?,?,?,?)');
+      $q->execute([$name, $cat, $price, $stock, $emoji]);
+      jsonOut(['ok' => true]);
     }
-    if ($action === 'stock' && $_SERVER['REQUEST_METHOD'] === 'POST') { $b=json_decode(file_get_contents('php://input'),true)??[]; $q=$db->prepare('UPDATE products SET stock=MAX(0,stock+?) WHERE id=?'); $q->execute([(int)($b['change']??0),(int)($b['id']??0)]); jsonOut(['ok'=>true]); }
-    jsonOut(['error'=>'Unknown action.'],404);
-  } catch(Throwable $e) { if($db->inTransaction())$db->rollBack(); jsonOut(['error'=>'Something went wrong while saving.'],500); }
+    if ($action === 'stock' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+      $b = json_decode(file_get_contents('php://input'), true) ?? [];
+      $q = $db->prepare('UPDATE products SET stock=MAX(0,stock+?) WHERE id=?');
+      $q->execute([(int)($b['change'] ?? 0), (int)($b['id'] ?? 0)]);
+      jsonOut(['ok' => true]);
+    }
+    jsonOut(['error' => 'Unknown action.'], 404);
+  } catch (Throwable $e) {
+    if ($db->inTransaction()) $db->rollBack();
+    jsonOut(['error' => 'Something went wrong while saving.'], 500);
+  }
 }
 ?>
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f8fa"><title>Sidewalk — Stall POS</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="style.css"></head>
-<body><aside class="sidebar"><a class="brand" href="#" aria-label="Sidewalk home"><span class="brand-icon">S</span><span>sidewalk<small>STALL POS</small></span></a><div class="nav-label">WORKSPACE</div><nav><button class="nav-item active" data-page="pos"><span>▦</span> Point of sale</button><button class="nav-item" data-page="overview"><span>◷</span> Overview</button><button class="nav-item" data-page="inventory"><span>▤</span> Inventory</button></nav><div class="sidebar-bottom"><div class="profile"><div class="avatar">S</div><div><b>Stall owner</b><small>Administrator</small></div><span class="dots">•••</span></div></div></aside>
-<main class="main"><header class="topbar"><div class="mobile-brand"><span class="brand-icon">S</span> sidewalk</div><div class="crumb"><span>Workspace</span><b>/</b><strong id="pageCrumb">Point of sale</strong></div><div class="top-actions"><span class="open-pill"><i></i> Stall is open</span><span class="date-label" id="dateLabel"></span></div></header>
-<section class="page active" id="page-pos"><div class="page-heading"><div><p class="eyebrow">YOUR COUNTER, ALL IN ONE PLACE</p><h1>Point of sale</h1><p class="subheading">Take an order, keep the line moving.</p></div><button class="quiet-button" data-goto="inventory">＋ <span>Manage products</span></button></div><div class="pos-layout"><div class="catalog"><div class="catalog-tools"><label class="search"><span>⌕</span><input id="searchInput" placeholder="Search menu..." autocomplete="off"><kbd>⌘ K</kbd></label><div class="categories" id="categories"></div></div><div class="product-grid" id="productGrid"></div></div><aside class="cart-panel"><div class="cart-header"><div><h2>Current order</h2><p id="cartCaption">No items yet</p></div><button class="icon-button" id="clearCart" title="Clear order">↻</button></div><div class="cart-items" id="cartItems"><div class="empty-cart"><div class="empty-icon">＋</div><b>Your order is waiting</b><span>Add items from the menu to get started.</span></div></div><div class="cart-footer"><div class="subtotal"><span>Subtotal</span><b id="subtotal">₱0.00</b></div><div class="total"><span>Total due</span><b id="total">₱0.00</b></div><div class="payment-method"><button type="button" class="pay-option selected" aria-pressed="true" data-payment="Cash">💵 <span>Cash</span></button><button type="button" class="pay-option" aria-pressed="false" data-payment="GCash">📱 <span>GCash</span></button></div><button class="checkout-button" id="checkout" disabled><span id="checkoutLabel">Complete Cash order</span><b id="chargeTotal">₱0.00 <span>→</span></b></button><p class="secure-note">🔒 &nbsp;Order and payment type are saved to sales records</p></div></aside></div></section>
-<section class="page" id="page-overview"><div class="page-heading"><div><p class="eyebrow">A LITTLE LOOK AT TODAY</p><h1>Good day, stall owner <span class="wave">✳</span></h1><p class="subheading">Here’s how your stall is doing.</p></div><button class="quiet-button" id="refreshOverview">↻ <span>Refresh</span></button></div><div class="stats-grid"><article class="stat-card"><div class="stat-top"><span>Sales today</span><span class="stat-icon green">₱</span></div><strong id="statSales">₱0.00</strong><small>Across all completed orders</small></article><article class="stat-card"><div class="stat-top"><span>Orders today</span><span class="stat-icon blue">↗</span></div><strong id="statOrders">0</strong><small>Keep that good food coming</small></article><article class="stat-card"><div class="stat-top"><span>Menu items</span><span class="stat-icon yellow">▦</span></div><strong id="statProducts">0</strong><small>Active products on your menu</small></article><article class="stat-card"><div class="stat-top"><span>Running low</span><span class="stat-icon pink">!</span></div><strong id="statLow">0</strong><small>Items with 5 or fewer in stock</small></article></div><div class="table-card"><div class="table-heading"><div><h2>Recent orders</h2><p>Your latest completed sales</p></div><span class="live-tag"><i></i> Live records</span></div><div class="table-wrap"><table><thead><tr><th>ORDER</th><th>DATE & TIME</th><th>ITEMS</th><th>PAYMENT</th><th class="right">TOTAL</th></tr></thead><tbody id="salesRows"></tbody></table></div></div></section>
-<section class="page" id="page-inventory"><div class="page-heading"><div><p class="eyebrow">THE GOOD STUFF YOU SELL</p><h1>Your menu</h1><p class="subheading">Manage prices and keep an eye on your stock.</p></div><button class="primary-button" id="addProduct">＋ Add a product</button></div><div class="inventory-summary"><span><b id="inventoryCount">0</b> products on your menu</span><span class="low-legend"><i></i> Low stock · 5 or fewer</span></div><div class="inventory-table table-card"><div class="table-wrap"><table><thead><tr><th>PRODUCT</th><th>CATEGORY</th><th>PRICE</th><th>STOCK LEFT</th><th>UPDATE STOCK</th><th>ACTIONS</th></tr></thead><tbody id="inventoryRows"></tbody></table></div></div></section></main>
-<div class="toast" id="toast" role="status"></div><div class="modal-backdrop" id="productModal"><form class="modal" id="productForm"><button class="modal-close" type="button" id="closeModal">×</button><p class="eyebrow">GROW YOUR MENU</p><h2 id="modalTitle">Add a product</h2><p class="subheading" id="modalSubtitle">Add something delicious to your stall.</p><label>Product name<input name="name" required placeholder="e.g. Double cheese burger"></label><div class="form-row"><label>Category<select name="category"><option>Burgers</option><option>Milk tea</option><option>Street food</option><option>Drinks</option><option>Other</option></select></label><label>Emoji<input name="emoji" value="🍔" maxlength="4"></label></div><div class="form-row"><label>Price (₱)<input name="price" type="number" min="1" step="0.01" required placeholder="89"></label><label>Starting stock<input name="stock" type="number" min="0" required placeholder="20"></label></div><button class="primary-button full" type="submit"><span id="submitLabel">Add to my menu</span> <span>→</span></button></form></div><script src="script.js?v=4" defer></script></body></html>
+<html lang="en">
 
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <title>Sidewalk — Stall POS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <aside class="sidebar"><a class="brand" href="#" aria-label="Sidewalk home"><span class="brand-icon">S</span><span>sidewalk<small>STALL POS</small></span></a>
+    <div class="nav-label">WORKSPACE</div>
+    <nav><button class="nav-item active" data-page="pos"><span>▦</span> Point of sale</button><button class="nav-item" data-page="overview"><span>◷</span> Overview</button><button class="nav-item" data-page="inventory"><span>▤</span> Inventory</button></nav>
+    <div class="sidebar-bottom">
+      <div class="profile">
+        <div class="avatar">S</div>
+        <div><b>Stall owner</b><small>Administrator</small></div><span class="dots">•••</span>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="mobile-brand"><span class="brand-icon">S</span> sidewalk</div>
+      <div class="crumb"><span>Workspace</span><b>/</b><strong id="pageCrumb">Point of sale</strong></div>
+      <div class="top-actions"><span class="open-pill"><i></i> Stall is open</span><span class="date-label" id="dateLabel"></span></div>
+    </header>
+    <section class="page active" id="page-pos">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">YOUR COUNTER, ALL IN ONE PLACE</p>
+          <h1>Point of sale</h1>
+          <p class="subheading">Take an order, keep the line moving.</p>
+        </div><button class="quiet-button" data-goto="inventory">＋ <span>Manage products</span></button>
+      </div>
+      <div class="pos-layout">
+        <div class="catalog">
+          <div class="catalog-tools"><label class="search"><span>⌕</span><input id="searchInput" placeholder="Search menu..." autocomplete="off"><kbd>⌘ K</kbd></label>
+            <div class="categories" id="categories"></div>
+          </div>
+          <div class="product-grid" id="productGrid"></div>
+        </div>
+        <aside class="cart-panel">
+          <div class="cart-header">
+            <div>
+              <h2>Current order</h2>
+              <p id="cartCaption">No items yet</p>
+            </div><button class="icon-button" id="clearCart" title="Clear order">↻</button>
+          </div>
+          <div class="cart-items" id="cartItems">
+            <div class="empty-cart">
+              <div class="empty-icon">＋</div><b>Your order is waiting</b><span>Add items from the menu to get started.</span>
+            </div>
+          </div>
+          <div class="cart-footer">
+            <div class="subtotal"><span>Subtotal</span><b id="subtotal">₱0.00</b></div>
+            <div class="total"><span>Total due</span><b id="total">₱0.00</b></div>
+            <div class="payment-method"><button type="button" class="pay-option selected" aria-pressed="true" data-payment="Cash">💵 <span>Cash</span></button><button type="button" class="pay-option" aria-pressed="false" data-payment="GCash">📱 <span>GCash</span></button></div><button class="checkout-button" id="checkout" disabled><span id="checkoutLabel">Complete Cash order</span><b id="chargeTotal">₱0.00 <span>→</span></b></button>
+            <p class="secure-note">🔒 &nbsp;Order and payment type are saved to sales records</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+    <section class="page" id="page-overview">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">A LITTLE LOOK AT TODAY</p>
+          <h1>Good day, stall owner <span class="wave">✳</span></h1>
+          <p class="subheading">Here’s how your stall is doing.</p>
+        </div><button class="quiet-button" id="refreshOverview">↻ <span>Refresh</span></button>
+      </div>
+      <div class="stats-grid">
+        <article class="stat-card">
+          <div class="stat-top"><span>Sales today</span><span class="stat-icon green">₱</span></div><strong id="statSales">₱0.00</strong><small>Across all completed orders</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Orders today</span><span class="stat-icon blue">↗</span></div><strong id="statOrders">0</strong><small>Keep that good food coming</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Menu items</span><span class="stat-icon yellow">▦</span></div><strong id="statProducts">0</strong><small>Active products on your menu</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Running low</span><span class="stat-icon pink">!</span></div><strong id="statLow">0</strong><small>Items with 5 or fewer in stock</small>
+        </article>
+      </div>
+      <div class="table-card">
+        <div class="table-heading">
+          <div>
+            <h2>Recent orders</h2>
+            <p>Your latest completed sales</p>
+          </div><span class="live-tag"><i></i> Live records</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ORDER</th>
+                <th>DATE & TIME</th>
+                <th>ITEMS</th>
+                <th>PAYMENT</th>
+                <th class="right">TOTAL</th>
+              </tr>
+            </thead>
+            <tbody id="salesRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section class="page" id="page-inventory">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">THE GOOD STUFF YOU SELL</p>
+          <h1>Your menu</h1>
+          <p class="subheading">Manage prices and keep an eye on your stock.</p>
+        </div><button class="primary-button" id="addProduct">＋ Add a product</button>
+      </div>
+      <div class="inventory-summary"><span><b id="inventoryCount">0</b> products on your menu</span><span class="low-legend"><i></i> Low stock · 5 or fewer</span></div>
+      <div class="inventory-table table-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>PRODUCT</th>
+                <th>CATEGORY</th>
+                <th>PRICE</th>
+                <th>STOCK LEFT</th>
+                <th>UPDATE STOCK</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="modal-backdrop" id="productModal">
+    <form class="modal" id="productForm"><button class="modal-close" type="button" id="closeModal">×</button>
+      <p class="eyebrow">GROW YOUR MENU</p>
+      <h2 id="modalTitle">Add a product</h2>
+      <p class="subheading" id="modalSubtitle">Add something delicious to your stall.</p><label>Product name<input name="name" required placeholder="e.g. Double cheese burger"></label>
+      <div class="form-row"><label>Category<select name="category">
+            <option>Burgers</option>
+            <option>Milk tea</option>
+            <option>Street food</option>
+            <option>Drinks</option>
+            <option>Other</option>
+          </select></label><label>Emoji<input name="emoji" value="🍔" maxlength="4"></label></div>
+      <div class="form-row"><label>Price (₱)<input name="price" type="number" min="1" step="0.01" required placeholder="89"></label><label>Starting stock<input name="stock" type="number" min="0" required placeholder="20"></label></div><button class="primary-button full" type="submit"><span id="submitLabel">Add to my menu</span> <span>→</span></button>
+    </form>
+  </div>
+  <script src="script.js?v=4" defer></script>
+</body>
+
+</html>
