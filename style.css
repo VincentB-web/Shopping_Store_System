@@ -1,8 +1,13 @@
 * {
   transition: .3s ease-in-out;
   padding: 10px;
+<<<<<<< HEAD
   margin: 0px;
   font-family:Arial, Helvetica, sans-serif;
+=======
+  margin: 5px;
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+>>>>>>> parent of e635e48 (update)
 }
 
 body {
@@ -42,6 +47,7 @@ button:hover {
     flex-direction: row;
   }
 }
+
 
 .dashboard, .pos {
   display: none;
