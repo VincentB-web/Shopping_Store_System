@@ -1,3 +1,5 @@
 
 stall-pos.sqlite
+node_modules/
+.netlify/
 

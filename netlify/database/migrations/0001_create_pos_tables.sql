@@ -1,0 +1,26 @@
+CREATE TABLE IF NOT EXISTS products (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  price NUMERIC(10,2) NOT NULL,
+  stock INTEGER NOT NULL DEFAULT 0,
+  emoji TEXT NOT NULL DEFAULT '🍔',
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT products_name_category_unique UNIQUE(name, category)
+);
+
+CREATE TABLE IF NOT EXISTS sales (
+  id BIGSERIAL PRIMARY KEY,
+  total NUMERIC(10,2) NOT NULL,
+  payment TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS sale_items (
+  id BIGSERIAL PRIMARY KEY,
+  sale_id BIGINT NOT NULL REFERENCES sales(id),
+  product_id BIGINT NOT NULL,
+  name TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  price NUMERIC(10,2) NOT NULL
+);

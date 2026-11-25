@@ -1,0 +1,10 @@
+{
+  "name": "sidewalk-stall-pos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@netlify/database": "^2.0.4",
+    "pg": "^8.23.1"
+  }
+}
